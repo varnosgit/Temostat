@@ -20,7 +20,7 @@
 #define TIME_TO_SLEEP  5        /* Time ESP32 will go to sleep (in seconds) */
 #define EEPROM_SIZE 1
 
-extern struct_message myData;
+extern hc_message myData;
 extern uint8_t registerStatus;
 extern bool newData_flag;
 extern uint8_t myMAC_Address[], Brodcast_Address[], Controller_Address[], TERMO_Address[];
@@ -49,102 +49,82 @@ void coreZEROTasks_code( void * pvParameters ){
 void setup()
 {
   Serial.begin(115200);
-  Serial.println("SSSSSSSSSSSSSSaaaaaaaaaaaaaalm");
-
-  // EEPROM.begin(512);
-  // registerStatus = EEPROM.read(0);  // the 0 location determind if the vent is registered to the controller before 0 = no, 1 = yes
-  // registerStatus = 0;
-  // EEPROM.write(0, registerStatus);
-  // EEPROM.commit();
-  	pinMode(HT1621LED, OUTPUT);
-	pinMode(HT1621Data, OUTPUT);
-	pinMode(HT1621WR, OUTPUT);
-	pinMode(HT1621CS, OUTPUT);
-
-delay(1000);
-
- HT1621_SendCmd(0x06);
-  LCD_Initialize();
-  HT1621_SendCmd(0x03);
- 
- 
-
-  LCD_Sign('W', 4);  // 1, 2, 3, 4, 5  wifi strengh
-  LCD_Sign('X', 5); // bat level 1, 2, 3, 4, 5 
-  LCD_Sign('T', 1); // centi vs. faren  0(no deg), 1, 2
-  LCD_Sign('S', 1); // set to Sign
-  LCD_Digit(21, 'S');
-
+  EEPROM.begin(512);
+  registerStatus = EEPROM.read(0);  // the 0 location determind if the vent is registered to the controller before 0 = no, 1 = yes
+  registerStatus = 0;
+  EEPROM.write(0, registerStatus);
+  EEPROM.commit();
+  
   // ++bootCount;
   // Serial.println("Boot number: " + String(bootCount));
-  //logtxt1.drawNumber(getCpuFrequencyMhz(), 71, 240, 2);
+  // logtxt1.drawNumber(getCpuFrequencyMhz(), 71, 240, 2);
   // delay(300); display_log_print("Boot number: " + String(bootCount));
 
   // esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
   // Serial.println("Setup ESP32 to sleep for every " + String(TIME_TO_SLEEP) + " Seconds");
 
 
-  // display_init();
-  // display_log_init();   display_log_print("Initialising...");
-  // delay(100);    display_log_print("Serial Debug connect!");
-  // //logtxt1.drawNumber(getCpuFrequencyMhz(), 71, 240, 2);
-  // delay(300); display_log_print("CPU Freq.: " + String(getCpuFrequencyMhz()) + "MHz");
-  // xTaskCreatePinnedToCore(
-  //                   coreZEROTasks_code,      /* Task function. */
-  //                   "Task1",        /* name of task. */
-  //                   10000,          /* Stack size of task */
-  //                   NULL,           /* parameter of the task */
-  //                   1,              /* priority of the task */
-  //                   &CoreZEROTasks, /* Task handle to keep track of created task */
-  //                   0);             /* pin task to core 0 */                  
-  // delay(500); 
-  // delay(200); display_log_print("2nd Core setup!");
-  // delay(100); timer_init(); display_log_print("Timers connected!");
+  display_init();
+  display_log_init();   display_log_print("Initialising...");
+  delay(100);    display_log_print("Serial Debug connect!");
+  //logtxt1.drawNumber(getCpuFrequencyMhz(), 71, 240, 2);
+  delay(300); display_log_print("CPU Freq.: " + String(getCpuFrequencyMhz()) + "MHz");
+  xTaskCreatePinnedToCore(
+                    coreZEROTasks_code,      /* Task function. */
+                    "Task1",        /* name of task. */
+                    10000,          /* Stack size of task */
+                    NULL,           /* parameter of the task */
+                    1,              /* priority of the task */
+                    &CoreZEROTasks, /* Task handle to keep track of created task */
+                    0);             /* pin task to core 0 */                  
+  delay(500); 
+  delay(200); display_log_print("2nd Core setup!");
+  delay(100); timer_init(); display_log_print("Timers connected!");
 
-  // wireless_init();
+  wireless_init();
 
 
 }
 ////////////////////////////////////////////////////////////////////////////////////
 void loop()
 {
-  // if (registerStatus == 0)  // this vent is not registerd before
-  // {
-  //   sendDataTo(Brodcast_Address, 0x01, Brodcast_Address);
-  //   delay(2000);
-  // }
-  // if (newData_flag)
-  // {
-  //   newData_flag = false;
-  //   if (myData._sender == 0x01) // data recieved from controller
-  //   {
-  //     switch (myData._command)
-  //     {
-  //       case 0x01: // registeration command
-  //         registerStatus = 1;
-  //         EEPROM.write(0, registerStatus);
-  //         for(int i=0; i<6; i++) 
-  //         {
-  //           Controller_Address[i] = myData.sender_MAC_addr[i];
-  //           EEPROM.write(i+1, myData.sender_MAC_addr[i]);
-  //         }
-  //         pairNew_device(Controller_Address);
-  //         EEPROM.commit();
-  //         display_log_print("Controller saved :)");
-  //         break;
+  if (registerStatus == 0)  // this vent is not registerd before
+  {
+    sendDataTo(Brodcast_Address, 0x01, Brodcast_Address);
+    delay(2000);
+  }
+  if (newData_flag)
+  {
+    newData_flag = false;
+    if (myData._sender == 0x01) // data recieved from controller
+    {
+      switch (myData._command)
+      {
+        case 0x01: // registeration command
+          registerStatus = 1;
+          EEPROM.write(0, registerStatus);
+          for(int i=0; i<6; i++) 
+          {
+            Controller_Address[i] = myData.sender_MAC_addr[i];
+            EEPROM.write(i+1, myData.sender_MAC_addr[i]);
+          }
+          pairNew_device(Controller_Address);
+          EEPROM.commit();
+          display_log_print("Controller saved :)");
+          break;
           
-  //       case 0x02: 
-  //         if (myData.ventStatus== 0)
-  //             display_log_print("closing vent"); // vent door open/close command
-  //         else display_log_print("opening vent");
-  //         //vent_door(myData.ventStatus);
-  //           break;
+        case 0x02: 
+          if (myData.ventStatus== 0)
+              display_log_print("closing vent"); // vent door open/close command
+          else display_log_print("opening vent");
+          //vent_door(myData.ventStatus);
+            break;
 
-  //       default:
-  //         break;
-  //     }
-  //   }
-  // }
+        default:
+          break;
+      }
+    }
+  }
 
 delay(2000);
 

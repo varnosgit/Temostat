@@ -6,7 +6,7 @@ uint8_t myMAC_Address[] = {0xFF, 0xFF, 0xFF , 0xFF , 0xFF ,0xFF};
 uint8_t Brodcast_Address[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF ,0xFF}; // {0x94, 0xB9, 0x7E , 0xD9 , 0xA1 ,0x04}; 
 uint8_t Controller_Address[] = {0x08, 0x3A, 0xF2 , 0x45 , 0xA5 ,0xC8};
 uint8_t TEMP_Address[] = {0x83, 0xCC, 0xA8 , 0x61 , 0x4B ,0x0C};
-struct_message myData;
+hc_message myData;
 
 void wireless_init(void)
 {
@@ -61,8 +61,9 @@ void sendDataTo(uint8_t *mac_addr, uint8_t command, uint8_t *theData)
     uint8_t temp_send_mac[6];
     memcpy(temp_send_mac, mac_addr, 6);
     memcpy(myData.sender_MAC_addr, myMAC_Address, 6);
+    memcpy(myData.reciever_MAC_addr, mac_addr, 6);
 
-    myData._sender = 0x01; //0 unknown, 1 controller, 2 termostat, 3 vent
+    myData._sender = 0x02; //0 unknown, 1 controller, 2 termostat, 3 vent
     myData._command = command; // register it to controller
 
     if (esp_now_send(temp_send_mac, (uint8_t *) &myData, sizeof(myData)) == ESP_OK)
