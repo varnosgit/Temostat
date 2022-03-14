@@ -25,9 +25,12 @@ extern uint8_t registerStatus;
 extern bool newData_flag;
 extern uint8_t myMAC_Address[], Brodcast_Address[], Controller_Address[], TERMO_Address[];
 
+const int DIN_PIN = 35;
+const int DIN_PIN2 = 0;
+
 RTC_DATA_ATTR int bootCount = 0;
 
-
+uint8_t myTemperature = 27;
 bool loop_start_flag = false;
 TaskHandle_t CoreZEROTasks;
 TFT_eSPI tft = TFT_eSPI();
@@ -48,6 +51,7 @@ void coreZEROTasks_code( void * pvParameters ){
 ////////////////////////////////////////////////////////////////////////////////////
 void setup()
 {
+  pinMode(DIN_PIN, INPUT); pinMode(DIN_PIN2, INPUT);
   Serial.begin(115200);
   EEPROM.begin(512);
   registerStatus = EEPROM.read(0);  // the 0 location determind if the vent is registered to the controller before 0 = no, 1 = yes
@@ -82,17 +86,82 @@ void setup()
   delay(100); timer_init(); display_log_print("Timers connected!");
 
   wireless_init();
-
-
 }
 ////////////////////////////////////////////////////////////////////////////////////
+char buf[18]; 
+uint8_t din_counter=0, din_counter2=0, register_wait_counter = 0;
+uint8_t register_mode_flag = 0;
 void loop()
 {
-  if (registerStatus == 0)  // this vent is not registerd before
+  if (digitalRead(DIN_PIN) == LOW)
   {
-    sendDataTo(Brodcast_Address, 0x01, Brodcast_Address);
-    delay(2000);
+    delay(100);
+    din_counter ++;
+    if (din_counter == 25) 
+    {
+      register_mode_flag = 1;
+      register_wait_counter = 0;
+      display_log_print("registering ...");
+    }
   }
+  else
+  {
+    if ((din_counter > 1) & (din_counter < 25))
+    {
+      myTemperature++;
+      display_log_print("Set Point: "+String(myTemperature));
+            myData.mode = 1;
+            myData.batStat = 98;
+            myData.fanStatus = 2;
+            myData.setPoint_temp = myTemperature;
+            myData.ventStatus = 11;
+            sendDataTo(Controller_Address, 0x02, Brodcast_Address);
+    }
+    din_counter = 0;
+  }
+  if (digitalRead(DIN_PIN2) == LOW)
+  {
+    delay(100);
+    din_counter2 ++;
+    if (din_counter2 == 25) 
+    {
+
+    }
+  }
+  else
+  {
+    if ((din_counter2 > 1) & (din_counter2 < 25))
+    {
+      myTemperature--;
+      display_log_print("Set Point: "+String(myTemperature));
+            myData.mode = 1;
+            myData.batStat = 98;
+            myData.fanStatus = 2;
+            myData.setPoint_temp = myTemperature;
+            myData.ventStatus = 11;
+            sendDataTo(Controller_Address, 0x02, Brodcast_Address);
+    }
+    din_counter2 = 0;
+  }
+  // if (registerStatus == 0)  // this device is not registerd before
+  // {
+  //   sendDataTo(Brodcast_Address, 0x01, Brodcast_Address);
+  //   delay(2000);
+  // }
+
+  if ((registerStatus == 0) & (register_mode_flag == 1))  // this device is not registerd before
+  {
+    myData.mode = 0;
+    sendDataTo(Brodcast_Address, 0x01, Brodcast_Address);
+    delay(1000);
+    register_wait_counter ++;
+    if (register_wait_counter > 10)
+    {
+      register_mode_flag = 0;
+      display_log_print("no controller found.");
+    }
+  }
+
   if (newData_flag)
   {
     newData_flag = false;
@@ -101,24 +170,45 @@ void loop()
       switch (myData._command)
       {
         case 0x01: // registeration command
-          registerStatus = 1;
-          EEPROM.write(0, registerStatus);
-          for(int i=0; i<6; i++) 
+          if ((registerStatus == 0) & (register_mode_flag == 1))  // this device is not registerd before
           {
-            Controller_Address[i] = myData.sender_MAC_addr[i];
-            EEPROM.write(i+1, myData.sender_MAC_addr[i]);
+            registerStatus = 1;
+            EEPROM.write(0, registerStatus);
+            for(int i=0; i<6; i++) 
+            {
+              Controller_Address[i] = myData.sender_MAC_addr[i];
+              EEPROM.write(i+1, myData.sender_MAC_addr[i]);
+            }
+            pairNew_device(Controller_Address);
+            EEPROM.commit();
+            display_log_print("Controller saved :)");
+
+            myData.mode = 1;
+            sendDataTo(Controller_Address, 0x02, Brodcast_Address);
+            register_mode_flag = 0;
+                
+            snprintf(buf, 18, "%02X:%02X:%02X:%02X:%02X:%02X", Controller_Address[0], Controller_Address[1], 
+            Controller_Address[2], Controller_Address[3], Controller_Address[4], Controller_Address[5]); 
+            display_log_print(String(buf));
+
           }
-          pairNew_device(Controller_Address);
-          EEPROM.commit();
-          display_log_print("Controller saved :)");
           break;
           
-        case 0x02: 
-          if (myData.ventStatus== 0)
-              display_log_print("closing vent"); // vent door open/close command
-          else display_log_print("opening vent");
-          //vent_door(myData.ventStatus);
+        case 0x02: // read status  
+            myData.mode = 1;
+            myData.batStat = 98;
+            myData.fanStatus = 2;
+            myData.setPoint_temp = myTemperature;
+            myData.ventStatus = 11;
+            sendDataTo(Controller_Address, 0x02, Brodcast_Address);
             break;
+
+        case 0x03: // open close vent  or   change set point of termostat
+          if (myData.ventStatus== 0)
+               display_log_print("closing vent"); // vent door open/close command
+          else display_log_print("opening vent");
+            //vent_door(myData.ventStatus);
+            break;    
 
         default:
           break;
@@ -126,16 +216,16 @@ void loop()
     }
   }
 
-delay(2000);
+delay(2);
 
-    //LCD_LED(1);
-    setpin_high(HT1621LED);
-     Serial.println("set led on");
-    delay(1000);
-    setpin_low(HT1621LED);
-     Serial.println("off");
-    //LCD_LED(0);
-    delay(1000);
+    // //LCD_LED(1);
+    // setpin_high(HT1621LED);
+    //  Serial.println("set led on");
+    // delay(1000);
+    // setpin_low(HT1621LED);
+    //  Serial.println("off");
+    // //LCD_LED(0);
+    // delay(1000);
 
  // esp_deep_sleep_start();
 }
