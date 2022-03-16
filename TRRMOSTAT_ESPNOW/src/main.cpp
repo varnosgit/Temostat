@@ -115,7 +115,7 @@ void loop()
             myData.fanStatus = 2;
             myData.setPoint_temp = myTemperature;
             myData.ventStatus = 11;
-            sendDataTo(Controller_Address, 0x02, Brodcast_Address);
+            sendDataTo(Controller_Address, 0x03, Brodcast_Address);
     }
     din_counter = 0;
   }
@@ -139,7 +139,7 @@ void loop()
             myData.fanStatus = 2;
             myData.setPoint_temp = myTemperature;
             myData.ventStatus = 11;
-            sendDataTo(Controller_Address, 0x02, Brodcast_Address);
+            sendDataTo(Controller_Address, 0x03, Brodcast_Address);
     }
     din_counter2 = 0;
   }
@@ -194,22 +194,22 @@ void loop()
           }
           break;
           
-        case 0x02: // read status  
+        case 0x02: // open close vent  or   change set point of termostat
+          // if (myData.ventStatus== 0)
+          //      display_log_print("closing vent"); // vent door open/close command
+          // else display_log_print("opening vent");
+          myTemperature = myData.setPoint_temp;
+          display_log_print("Set Point: "+String(myTemperature));
+            break;    
+
+        case 0x03: // read status  
             myData.mode = 1;
             myData.batStat = 98;
             myData.fanStatus = 2;
             myData.setPoint_temp = myTemperature;
             myData.ventStatus = 11;
-            sendDataTo(Controller_Address, 0x02, Brodcast_Address);
-            break;
-
-        case 0x03: // open close vent  or   change set point of termostat
-          if (myData.ventStatus== 0)
-               display_log_print("closing vent"); // vent door open/close command
-          else display_log_print("opening vent");
-            //vent_door(myData.ventStatus);
-            break;    
-
+            sendDataTo(Controller_Address, 0x03, Brodcast_Address);
+            break;  
         default:
           break;
       }
