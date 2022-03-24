@@ -54,10 +54,18 @@ void setup()
   pinMode(DIN_PIN, INPUT); pinMode(DIN_PIN2, INPUT);
   Serial.begin(115200);
   EEPROM.begin(512);
+  /* eeprom locations:
+    * 0 = registery stat 0=no 1=registered
+    * 1-6 = controller address
+    * 7 = setpoint
+    * 8 = vent location
+  */
   registerStatus = EEPROM.read(0);  // the 0 location determind if the vent is registered to the controller before 0 = no, 1 = yes
+  myTemperature = EEPROM.read(7);
+  myTemperature = 15;
   registerStatus = 0;
-  EEPROM.write(0, registerStatus);
-  EEPROM.commit();
+  // EEPROM.write(0, registerStatus);
+  // EEPROM.commit();
   
   // ++bootCount;
   // Serial.println("Boot number: " + String(bootCount));
@@ -91,6 +99,8 @@ void setup()
 char buf[18]; 
 uint8_t din_counter=0, din_counter2=0, register_wait_counter = 0;
 uint8_t register_mode_flag = 0;
+int unknown_source_flag = 0;
+
 void loop()
 {
   if (digitalRead(DIN_PIN) == LOW)
@@ -99,9 +109,17 @@ void loop()
     din_counter ++;
     if (din_counter == 25) 
     {
-      register_mode_flag = 1;
-      register_wait_counter = 0;
-      display_log_print("registering ...");
+      if (registerStatus == 0) // no register
+      {
+        register_mode_flag = 1;
+        register_wait_counter = 0;
+        display_log_print("registering ...");
+      }
+      else // registered before
+      {
+        display_log_print("dev. unregistered");
+        registerStatus = 0;
+      }
     }
   }
   else
@@ -110,12 +128,14 @@ void loop()
     {
       myTemperature++;
       display_log_print("Set Point: "+String(myTemperature));
+       if (registerStatus == 1){
             myData.mode = 1;
             myData.batStat = 98;
             myData.fanStatus = 2;
             myData.setPoint_temp = myTemperature;
             myData.ventStatus = 11;
-            sendDataTo(Controller_Address, 0x03, Brodcast_Address);
+            sendDataTo(Controller_Address, 0x02, Brodcast_Address);
+       }
     }
     din_counter = 0;
   }
@@ -134,12 +154,14 @@ void loop()
     {
       myTemperature--;
       display_log_print("Set Point: "+String(myTemperature));
+      if (registerStatus == 1){
             myData.mode = 1;
             myData.batStat = 98;
             myData.fanStatus = 2;
             myData.setPoint_temp = myTemperature;
             myData.ventStatus = 11;
-            sendDataTo(Controller_Address, 0x03, Brodcast_Address);
+            sendDataTo(Controller_Address, 0x02, Brodcast_Address);
+      }
     }
     din_counter2 = 0;
   }
@@ -194,15 +216,39 @@ void loop()
           }
           break;
           
-        case 0x02: // open close vent  or   change set point of termostat
+        case 0x02: // execute an order     open close vent  or   change set point of termostat
+          for(int i=0; i<6; i++) 
+            {
+              if (Controller_Address[i] != myData.sender_MAC_addr[i]){
+                unknown_source_flag = 1;
+              }
+            }
+            if (unknown_source_flag > 0) {display_log_print("unknown source"); break;}
           // if (myData.ventStatus== 0)
           //      display_log_print("closing vent"); // vent door open/close command
           // else display_log_print("opening vent");
           myTemperature = myData.setPoint_temp;
           display_log_print("Set Point: "+String(myTemperature));
+          
+           myData.mode = 1;
+            myData.batStat = 98;
+            myData.fanStatus = 2;
+            myData.setPoint_temp = myTemperature;
+            myData.ventStatus = 11;
+            sendDataTo(Controller_Address, 0x03, Brodcast_Address);
+
             break;    
 
         case 0x03: // read status  
+          for(int i=0; i<6; i++) 
+            {
+              if (Controller_Address[i] != myData.sender_MAC_addr[i]){
+                unknown_source_flag = 1;
+              }
+            }
+            if (unknown_source_flag > 0) {display_log_print("unknown source"); break;}
+
+            display_log_print("sending status.");
             myData.mode = 1;
             myData.batStat = 98;
             myData.fanStatus = 2;
@@ -210,7 +256,29 @@ void loop()
             myData.ventStatus = 11;
             sendDataTo(Controller_Address, 0x03, Brodcast_Address);
             break;  
+
+         case 0x04: // unregister 
+         for(int i=0; i<6; i++) 
+            {
+              if (Controller_Address[i] != myData.sender_MAC_addr[i]){
+                unknown_source_flag = 1;
+              }
+            }
+            if (unknown_source_flag > 0) {display_log_print("unknown source"); break;}
+            registerStatus = 0;
+            EEPROM.write(0, registerStatus);
+
+            for(int i=0; i<6; i++) 
+            {
+              Controller_Address[i] = 0xFF;
+              EEPROM.write(i+1, Controller_Address[i]);
+            }
+            EEPROM.commit();
+            display_log_print("unregister command");
+            break; 
+
         default:
+          display_log_print("unknown command");
           break;
       }
     }
